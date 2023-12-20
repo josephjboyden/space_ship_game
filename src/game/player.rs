@@ -1,4 +1,8 @@
-use bevy::{prelude::*, input::{gamepad::GamepadButtonInput, ButtonState}, utils::HashMap};
+use bevy::{
+    input::{gamepad::GamepadButtonInput, ButtonState},
+    prelude::*,
+    utils::HashMap,
+};
 use num::FromPrimitive;
 use num_derive::FromPrimitive;
 use std::mem;
@@ -7,15 +11,10 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app .insert_resource(PlayerManager::default())
-            .add_event::<PlayerJoinedEvent>() 
-            .add_systems(PreUpdate, (
-                spawn_controller_player,
-                spawn_keyboard_player,
-            ))
-            .add_systems(Update,(
-                player_joined,
-            ));
+        app.insert_resource(PlayerManager::default())
+            .add_event::<PlayerJoinedEvent>()
+            .add_systems(PreUpdate, (spawn_controller_player, spawn_keyboard_player))
+            .add_systems(Update, (player_joined,));
     }
 }
 
@@ -32,11 +31,17 @@ pub struct InputScheme {
 }
 
 impl InputScheme {
-    fn from_gamepad (gamepad: Gamepad) -> Self {
-        Self {keyboard: false, id: Some(gamepad.id)}
+    fn from_gamepad(gamepad: Gamepad) -> Self {
+        Self {
+            keyboard: false,
+            id: Some(gamepad.id),
+        }
     }
 
-    pub const KEYBOARD: Self = InputScheme{keyboard: true, id: None};
+    pub const KEYBOARD: Self = InputScheme {
+        keyboard: true,
+        id: None,
+    };
 
     pub fn is_controller(&self) -> bool {
         return !self.keyboard;
@@ -84,12 +89,15 @@ struct PlayerJoinedEvent(Entity);
 #[derive(Component)]
 struct Player {
     role: Role,
-    input_scheme: InputScheme
+    input_scheme: InputScheme,
 }
 
 impl Player {
-    fn new(role: Role, input_scheme: InputScheme) -> Player{
-        Player {role: role, input_scheme: input_scheme}
+    fn new(role: Role, input_scheme: InputScheme) -> Player {
+        Player {
+            role: role,
+            input_scheme: input_scheme,
+        }
     }
 }
 
@@ -97,11 +105,16 @@ fn spawn_keyboard_player(
     mut player_manager: ResMut<PlayerManager>,
     mut commands: Commands,
     keys: Res<Input<KeyCode>>,
-    mut player_joined_event_writer: EventWriter<PlayerJoinedEvent>
+    mut player_joined_event_writer: EventWriter<PlayerJoinedEvent>,
 ) {
     if keys.just_pressed(KeyCode::Return) {
         if !player_manager.used_schemes.contains(&InputScheme::KEYBOARD) {
-            spawn_player(&mut player_manager, &mut commands, InputScheme::KEYBOARD, &mut player_joined_event_writer);
+            spawn_player(
+                &mut player_manager,
+                &mut commands,
+                InputScheme::KEYBOARD,
+                &mut player_joined_event_writer,
+            );
         }
     }
 }
@@ -110,12 +123,20 @@ fn spawn_controller_player(
     mut player_manager: ResMut<PlayerManager>,
     mut commands: Commands,
     mut button_events: EventReader<GamepadButtonInput>,
-    mut player_joined_event_writer: EventWriter<PlayerJoinedEvent>
+    mut player_joined_event_writer: EventWriter<PlayerJoinedEvent>,
 ) {
     for button_event in button_events.read() {
         let scheme = InputScheme::from_gamepad(button_event.button.gamepad);
-        if button_event.button.button_type == GamepadButtonType::South && button_event.state == ButtonState::Pressed && !player_manager.used_schemes.contains(&scheme){
-            spawn_player(&mut player_manager, &mut commands, scheme, &mut player_joined_event_writer);
+        if button_event.button.button_type == GamepadButtonType::South
+            && button_event.state == ButtonState::Pressed
+            && !player_manager.used_schemes.contains(&scheme)
+        {
+            spawn_player(
+                &mut player_manager,
+                &mut commands,
+                scheme,
+                &mut player_joined_event_writer,
+            );
         }
     }
 }
@@ -124,7 +145,7 @@ fn spawn_player(
     player_manager: &mut ResMut<PlayerManager>,
     commands: &mut Commands,
     scheme: InputScheme,
-    player_joined_event_writer: &mut EventWriter<PlayerJoinedEvent>
+    player_joined_event_writer: &mut EventWriter<PlayerJoinedEvent>,
 ) {
     for i in 0..player_manager.available_roles.len() {
         if player_manager.available_roles[i] {
@@ -145,12 +166,14 @@ fn player_joined(
         if let Ok(player) = player_query.get(event.0) {
             if player.input_scheme.is_keyboard() {
                 println!("{:?} just joined with keyboard and mouse", player.role)
+            } else {
+                println!(
+                    "{:?} just joined with controller {}",
+                    player.role,
+                    player.input_scheme.id.unwrap()
+                )
             }
-            else {
-                println!("{:?} just joined with controller {}", player.role, player.input_scheme.id.unwrap())
-            }
-        }
-        else {
+        } else {
             println!("joined event missed because player not yet spawned")
         }
     }

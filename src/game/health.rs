@@ -1,12 +1,10 @@
 use bevy::prelude::*;
 
-
 pub struct HealthPlugin;
 
 impl Plugin for HealthPlugin {
-    fn build(&self, app : &mut App)
-    {
-        app .add_event::<HealthRunoutEvent>()
+    fn build(&self, app: &mut App) {
+        app.add_event::<HealthRunoutEvent>()
             .add_event::<ChangeHealthEvent>()
             .add_systems(Update, change_health);
     }
@@ -28,14 +26,14 @@ impl Health {
 }
 
 #[derive(PartialEq, Eq)]
-pub enum ChangeHealthMode{
+pub enum ChangeHealthMode {
     Damage,
     Heal,
     Set,
 }
 
 #[derive(Event)]
-pub struct ChangeHealthEvent{
+pub struct ChangeHealthEvent {
     value: f32,
     change_health_mode: ChangeHealthMode,
     entity: Entity,
@@ -70,14 +68,17 @@ pub fn change_health(
                 }
                 ChangeHealthMode::Heal => {
                     health.value += event.value;
-                    if health.value > health.max_value {health.value = health.max_value}
+                    if health.value > health.max_value {
+                        health.value = health.max_value
+                    }
                 }
                 ChangeHealthMode::Set => {
                     health.value = event.value;
                     if health.value <= 0. {
                         health_runout_event_writer.send(HealthRunoutEvent(event.entity))
+                    } else if health.value > health.max_value {
+                        health.value = health.max_value
                     }
-                    else if health.value > health.max_value {health.value = health.max_value}
                 }
             }
         }
