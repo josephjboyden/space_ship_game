@@ -1,11 +1,12 @@
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 
 use super::super::{
-    aliens::{Alien, ALIEN_RADIUS},
-    physics::{circle_circle_collision, CircleCollider, Physics, Velocity},
+    aliens::Alien,
+    health::{ChangeHealthEvent, ChangeHealthMode},
+    physics::{
+        CircleCollider, CollideEvent, CollisionLayerNames, CollisionLayers, Physics, Velocity,
+    },
     player::{PlayerManager, Role},
-    quad_tree::{QuadTree, AABB},
-    Score,
 };
 use super::{Gun, Ship};
 
@@ -215,29 +216,35 @@ fn gun_fired(
     mut fire_event_reader: EventReader<FireEvent>,
     time: Res<Time>,
     mut gun_query: Query<&mut Gun>,
+    mut collision_layers: ResMut<CollisionLayers>,
 ) {
     for event in fire_event_reader.read() {
         if let Ok(mut gun) = gun_query.get_single_mut() {
             gun.last_fired = time.elapsed_seconds_wrapped()
         }
-        commands.spawn((
-            Projectile {
-                time_of_creation: time.elapsed_seconds_wrapped(),
-            },
-            Velocity(event.direction * PROJECTILE_SPEED + event.velocity.0),
-            Physics::default(),
-            MaterialMesh2dBundle {
-                mesh: meshes.add(shape::Circle::new(10.).into()).into(),
-                material: materials.add(ColorMaterial::from(Color::ORANGE_RED)),
-                transform: Transform::from_translation(Vec3::new(
-                    event.position.x,
-                    event.position.y,
-                    0.3,
-                )),
-                ..default()
-            },
-            CircleCollider::new(10.),
-        ));
+        let projectile_entity = commands
+            .spawn((
+                Projectile {
+                    time_of_creation: time.elapsed_seconds_wrapped(),
+                },
+                Velocity(event.direction * PROJECTILE_SPEED + event.velocity.0),
+                Physics::default(),
+                MaterialMesh2dBundle {
+                    mesh: meshes.add(shape::Circle::new(10.).into()).into(),
+                    material: materials.add(ColorMaterial::from(Color::ORANGE_RED)),
+                    transform: Transform::from_translation(Vec3::new(
+                        event.position.x,
+                        event.position.y,
+                        0.3,
+                    )),
+                    ..default()
+                },
+                CircleCollider::new(10.),
+            ))
+            .id();
+        collision_layers.layers[CollisionLayerNames::Projectile as usize]
+            .in_layer
+            .push(projectile_entity);
     }
 }
 
@@ -257,30 +264,20 @@ fn despawn_projectiles(
 
 fn check_projectile_collisions(
     mut commands: Commands,
-    projectile_query: Query<
-        (Entity, &Transform, &CircleCollider),
-        (With<Projectile>, Without<Alien>),
-    >,
-    alien_query: Query<(Entity, &Transform, &CircleCollider), (With<Alien>, Without<Projectile>)>,
-    mut score: ResMut<Score>,
-    quad_tree: Res<QuadTree>,
+    projectile_query: Query<Entity, (With<Projectile>, Without<Alien>)>,
+    alien_query: Query<Entity, (With<Alien>, Without<Projectile>)>,
+    mut change_health_event_writer: EventWriter<ChangeHealthEvent>,
+    mut collide_event_reader: EventReader<CollideEvent>,
 ) {
-    for (projectile_entity, projectile_transform, projectile_collider) in projectile_query.iter() {
-        for entity in quad_tree.query_range(&AABB::new(
-            projectile_transform.translation.xy(),
-            projectile_collider.radius + ALIEN_RADIUS,
-        )) {
-            if let Ok((alien_entity, alien_transform, alien_collider)) = alien_query.get(entity) {
-                if circle_circle_collision(
-                    projectile_collider,
-                    projectile_transform.translation.xy(),
-                    alien_collider,
-                    alien_transform.translation.xy(),
-                ) {
-                    commands.entity(projectile_entity).despawn();
-                    commands.entity(alien_entity).despawn();
-                    score.0 += 1;
-                }
+    for event in collide_event_reader.read() {
+        if let Ok(projectile) = projectile_query.get(event.a) {
+            if let Ok(alien) = alien_query.get(event.b) {
+                commands.entity(projectile).despawn();
+                change_health_event_writer.send(ChangeHealthEvent::new(
+                    10.,
+                    ChangeHealthMode::Damage,
+                    alien,
+                ));
             }
         }
     }

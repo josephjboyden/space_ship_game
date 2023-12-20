@@ -6,9 +6,11 @@ use std::collections::HashMap;
 
 use super::{
     asteroids::Asteroid,
-    health::Health,
-    physics::{CircleCollider, Physics, Velocity},
+    health::{Health, HealthRunoutEvent},
+    health_pack::SpawnHelthPackEvent,
+    physics::{CircleCollider, CollisionLayerNames, CollisionLayers, Physics, Velocity},
     quad_tree::*,
+    score::Score,
     ship::Ship,
     PLAYER_AREA_HALF_DIMENTION,
 };
@@ -19,7 +21,7 @@ impl Plugin for AliensPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(QuadTreePlugin)
             .add_systems(Startup, spawn_aliens)
-            .add_systems(Update, (simulate_boids, check_bounds))
+            .add_systems(Update, (simulate_boids, check_bounds, check_runout))
             .add_systems(PostUpdate, point_to_velocity);
     }
 }
@@ -41,7 +43,11 @@ pub const ALIEN_RADIUS: f32 = 15.;
 const ALIEN_SIZE: f32 = ALIEN_RADIUS * 2. / 64.;
 const HEALTH: f32 = 1.0;
 
-fn spawn_aliens(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn spawn_aliens(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut collision_layers: ResMut<CollisionLayers>,
+) {
     let mut rng = rand::thread_rng();
     println!("{}", NUM);
 
@@ -51,23 +57,28 @@ fn spawn_aliens(mut commands: Commands, asset_server: Res<AssetServer>) {
         let x: f32 = rng.gen_range(-SPAWN_RANGE..SPAWN_RANGE);
         let y: f32 = rng.gen_range(-SPAWN_RANGE..SPAWN_RANGE);
 
-        commands.spawn((
-            SpriteBundle {
-                texture: asset_server.load("alien.png"),
-                transform: Transform {
-                    translation: Vec3::new(x, y, 0.2),
-                    scale: Vec3::new(ALIEN_SIZE, ALIEN_SIZE, 1.),
-                    rotation: Quat::from_rotation_z(Vec2::X.angle_between(forward)),
+        let alien_entity = commands
+            .spawn((
+                SpriteBundle {
+                    texture: asset_server.load("alien.png"),
+                    transform: Transform {
+                        translation: Vec3::new(x, y, 0.2),
+                        scale: Vec3::new(ALIEN_SIZE, ALIEN_SIZE, 1.),
+                        rotation: Quat::from_rotation_z(Vec2::X.angle_between(forward)),
+                    },
+                    ..default()
                 },
-                ..default()
-            },
-            Physics::default(),
-            Velocity(forward * SPEED),
-            Alien::default(),
-            CircleCollider::new(15.),
-            Health::new(HEALTH),
-            QuadTreeElement,
-        ));
+                Physics::default(),
+                Velocity(forward * SPEED),
+                Alien::default(),
+                CircleCollider::new(15.),
+                Health::new(HEALTH),
+                QuadTreeElement,
+            ))
+            .id();
+        collision_layers.layers[CollisionLayerNames::Alien as usize]
+            .in_layer
+            .push(alien_entity);
     }
 }
 
@@ -287,5 +298,22 @@ fn check_bounds(mut aliens_query: Query<&mut Transform, With<Alien>>) {
 fn point_to_velocity(mut alien_query: Query<(&Velocity, &mut Transform), With<Alien>>) {
     for (alien_velocity, mut alien_transform) in alien_query.iter_mut() {
         alien_transform.rotation = Quat::from_rotation_z(Vec2::X.angle_between(alien_velocity.0));
+    }
+}
+
+fn check_runout(
+    mut commands: Commands,
+    mut health_runout_event_reader: EventReader<HealthRunoutEvent>,
+    alien_query: Query<(Entity, &Transform), With<Alien>>,
+    mut score: ResMut<Score>,
+    mut spawn_health_pack_event_writer: EventWriter<SpawnHelthPackEvent>,
+) {
+    for event in health_runout_event_reader.read() {
+        if let Ok((alien_entity, alien_transform)) = alien_query.get(event.0) {
+            commands.entity(alien_entity).despawn();
+            score.0 += 1;
+            spawn_health_pack_event_writer
+                .send(SpawnHelthPackEvent::new(alien_transform.translation.xy()))
+        }
     }
 }

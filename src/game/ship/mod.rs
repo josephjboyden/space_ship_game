@@ -1,14 +1,18 @@
 mod gunner;
 mod pilot;
 
+use std::ops::Deref;
+
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 
 use super::{
     aliens::Alien,
     health::HealthRunoutEvent,
     health::{ChangeHealthEvent, ChangeHealthMode, Health},
-    physics::{circle_circle_collision, Acceleration, CircleCollider, Physics, Velocity},
-    quad_tree::{QuadTree, AABB},
+    physics::{
+        Acceleration, CircleCollider, CollideEvent, CollisionLayerNames, CollisionLayers, Physics,
+        Velocity,
+    },
     GameOverEvent,
 };
 
@@ -64,8 +68,9 @@ fn spawn_ship(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
     asset_server: Res<AssetServer>,
+    mut collision_layers: ResMut<CollisionLayers>,
 ) {
-    commands
+    let ship_entity = commands
         .spawn((
             SpriteBundle {
                 texture: asset_server.load("ship.png"),
@@ -98,7 +103,11 @@ fn spawn_ship(
                 },
                 Gun::new(75. * SHIP_SIZE),
             ));
-        });
+        })
+        .id();
+    collision_layers.layers[CollisionLayerNames::Ship as usize]
+        .in_layer
+        .push(ship_entity);
 }
 
 fn move_camera(
@@ -114,23 +123,15 @@ fn move_camera(
 
 fn check_collisions(
     mut commands: Commands,
-    mut ship_query: Query<(Entity, &Transform, &CircleCollider), (With<Ship>, Without<Alien>)>,
-    alien_query: Query<(Entity, &Transform, &CircleCollider), (With<Alien>, Without<Ship>)>,
-    quad_tree: Res<QuadTree>,
+    ship_query: Query<Entity, (With<Ship>, Without<Alien>)>,
+    alien_query: Query<Entity, (With<Alien>, Without<Ship>)>,
     mut change_health_event_writer: EventWriter<ChangeHealthEvent>,
+    mut collide_event_reader: EventReader<CollideEvent>,
 ) {
-    if let Ok((ship, ship_transform, ship_collider)) = ship_query.get_single_mut() {
-        for entity in quad_tree.query_range(&AABB::new(
-            ship_transform.translation.xy(),
-            ship_collider.radius,
-        )) {
-            if let Ok((alien, alien_transform, alien_collider)) = alien_query.get(entity) {
-                if circle_circle_collision(
-                    ship_collider,
-                    ship_transform.translation.xy(),
-                    alien_collider,
-                    alien_transform.translation.xy(),
-                ) {
+    if let Ok(ship) = ship_query.get_single() {
+        for event in collide_event_reader.read() {
+            if event.a == ship {
+                if let Ok(alien) = alien_query.get(event.b) {
                     change_health_event_writer.send(ChangeHealthEvent::new(
                         0.,
                         ChangeHealthMode::Damage,

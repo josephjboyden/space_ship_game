@@ -1,6 +1,7 @@
 mod aliens;
 mod asteroids;
 pub mod health;
+pub mod health_pack;
 mod hud;
 pub mod physics;
 mod player;
@@ -13,6 +14,7 @@ use bevy::prelude::*;
 use aliens::AliensPlugin;
 use asteroids::AsteroidsPlugin;
 use health::HealthPlugin;
+use health_pack::HealthPackPlugin;
 use hud::HUDPlugin;
 use physics::PhysicsPlugin;
 use player::PlayerPlugin;
@@ -33,6 +35,7 @@ impl Plugin for GamePlugin {
                 PlayerPlugin,
                 HUDPlugin,
                 HealthPlugin,
+                HealthPackPlugin,
             ));
     }
 }
