@@ -1,8 +1,6 @@
 mod gunner;
 mod pilot;
 
-use std::ops::Deref;
-
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 
 use super::{
@@ -89,7 +87,7 @@ fn spawn_ship(
             Velocity::default(),
             Ship::default(),
             Health::new(100.),
-            CircleCollider::new(30.),
+            CircleCollider::new(30., CollisionLayerNames::Ship),
         ))
         .with_children(|parent| {
             parent.spawn((
@@ -133,7 +131,7 @@ fn check_collisions(
             if event.a == ship {
                 if let Ok(alien) = alien_query.get(event.b) {
                     change_health_event_writer.send(ChangeHealthEvent::new(
-                        0.,
+                        5.,
                         ChangeHealthMode::Damage,
                         ship,
                     ));

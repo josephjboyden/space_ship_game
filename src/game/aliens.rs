@@ -71,12 +71,12 @@ fn spawn_aliens(
                 Physics::default(),
                 Velocity(forward * SPEED),
                 Alien::default(),
-                CircleCollider::new(15.),
+                CircleCollider::new(15., CollisionLayerNames::Aliens),
                 Health::new(HEALTH),
                 QuadTreeElement,
             ))
             .id();
-        collision_layers.layers[CollisionLayerNames::Alien as usize]
+        collision_layers.layers[CollisionLayerNames::Aliens as usize]
             .in_layer
             .push(alien_entity);
     }

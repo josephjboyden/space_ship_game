@@ -239,10 +239,10 @@ fn gun_fired(
                     )),
                     ..default()
                 },
-                CircleCollider::new(10.),
+                CircleCollider::new(10., CollisionLayerNames::CollidesWithAliens),
             ))
             .id();
-        collision_layers.layers[CollisionLayerNames::Projectile as usize]
+        collision_layers.layers[CollisionLayerNames::CollidesWithAliens as usize]
             .in_layer
             .push(projectile_entity);
     }

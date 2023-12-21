@@ -1,10 +1,6 @@
-use std::mem;
-
 use bevy::prelude::*;
 
 use super::quad_tree::{QuadTree, AABB};
-
-use num::FromPrimitive;
 use num_derive::FromPrimitive;
 
 pub struct PhysicsPlugin;
@@ -100,11 +96,15 @@ fn velocity_physics_update(
 #[derive(Component)]
 pub struct CircleCollider {
     pub radius: f32,
+    layer: CollisionLayerNames,
 }
 
 impl CircleCollider {
-    pub fn new(radius: f32) -> Self {
-        Self { radius: radius }
+    pub fn new(radius: f32, layer: CollisionLayerNames) -> Self {
+        Self {
+            radius: radius,
+            layer: layer,
+        }
     }
 }
 
@@ -126,24 +126,22 @@ fn circle_circle_collision(
 //     }
 // }
 
-#[derive(FromPrimitive, Clone, Copy)]
+#[derive(FromPrimitive, Clone, Copy, PartialEq, Eq)]
 pub enum CollisionLayerNames {
-    Alien,
+    CollidesWithAliens,
     Ship,
-    Projectile,
-    HealthPack,
+    Aliens,
+    HealthPacks,
 }
 
 pub struct CollisionLayer {
-    id: usize, //id must match index in collision layer reasorces "layers" vec
-    collides_with: Vec<usize>,
+    collides_with: Vec<CollisionLayerNames>,
     pub in_layer: Vec<Entity>,
 }
 
 impl CollisionLayer {
-    fn new(id: usize, collides_with: Vec<usize>) -> Self {
+    fn new(collides_with: Vec<CollisionLayerNames>) -> Self {
         Self {
-            id: id,
             collides_with: collides_with,
             in_layer: vec![],
         }
@@ -158,29 +156,15 @@ impl Default for CollisionLayers {
     fn default() -> Self {
         Self {
             layers: vec![
-                CollisionLayer::new(CollisionLayerNames::Alien as usize, vec![]),
-                CollisionLayer::new(
-                    CollisionLayerNames::Ship as usize,
-                    vec![CollisionLayerNames::Alien as usize],
-                ),
-                CollisionLayer::new(
-                    CollisionLayerNames::Projectile as usize,
-                    vec![CollisionLayerNames::Alien as usize],
-                ),
-                CollisionLayer::new(
-                    CollisionLayerNames::HealthPack as usize,
-                    vec![CollisionLayerNames::Ship as usize],
-                ),
+                CollisionLayer::new(vec![CollisionLayerNames::Aliens]), //match enum order
+                CollisionLayer::new(vec![
+                    CollisionLayerNames::HealthPacks,
+                    CollisionLayerNames::Aliens,
+                ]),
+                CollisionLayer::new(vec![]),
+                CollisionLayer::new(vec![]),
             ],
         }
-    }
-}
-impl CollisionLayers {
-    fn add_collision_layer(&mut self, collides_with: Vec<usize>) -> usize {
-        let collision_layer = CollisionLayer::new(self.layers.len(), collides_with);
-        let id = collision_layer.id;
-        self.layers.push(collision_layer);
-        id
     }
 }
 
@@ -203,6 +187,10 @@ fn handle_collisions(
     mut collide_event_writer: EventWriter<CollideEvent>,
 ) {
     for layer in &collision_layers.layers {
+        if layer.collides_with.len() == 0 {
+            continue;
+        }
+
         for entity in &layer.in_layer {
             if let Ok((circle_collider, transform)) = circle_collider_query.get(*entity) {
                 handle_circle_collisions(
@@ -212,13 +200,14 @@ fn handle_collisions(
                     &circle_collider_query,
                     &quad_tree,
                     &mut collide_event_writer,
+                    &layer.collides_with,
                 );
             }
         }
     }
 }
 
-const COLLIDER_CHECK_DISTANCE: f32 = 100.; //must be larger than max radius of the largest collider
+const COLLIDER_CHECK_DISTANCE: f32 = 30.; //must be larger than max radius of the largest collider
 fn handle_circle_collisions(
     a: &CircleCollider,
     a_translation: Vec2,
@@ -226,14 +215,17 @@ fn handle_circle_collisions(
     circle_collider_query: &Query<(&CircleCollider, &Transform)>,
     quad_tree: &Res<QuadTree>,
     collide_event_writer: &mut EventWriter<CollideEvent>,
+    collides_with: &Vec<CollisionLayerNames>,
 ) {
     for b_entity in quad_tree.query_range(&AABB::new(
         a_translation,
         a.radius + COLLIDER_CHECK_DISTANCE,
     )) {
         if let Ok((b, b_transform)) = circle_collider_query.get(b_entity) {
-            if circle_circle_collision(a, a_translation, b, b_transform.translation.xy()) {
-                collide_event_writer.send(CollideEvent::new(*a_entity, b_entity))
+            if collides_with.contains(&b.layer) {
+                if circle_circle_collision(a, a_translation, b, b_transform.translation.xy()) {
+                    collide_event_writer.send(CollideEvent::new(*a_entity, b_entity))
+                }
             }
         }
     }
