@@ -11,7 +11,7 @@ use super::{
         Acceleration, CircleCollider, CollideEvent, CollisionLayerNames, CollisionLayers, Physics,
         Velocity,
     },
-    GameOverEvent,
+    GameOverEvent, PLAYER_AREA_HALF_DIMENTION,
 };
 
 use crate::MainCamera;
@@ -25,7 +25,7 @@ impl Plugin for ShipPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((PilotPlugin, GunnerPlugin))
             .add_systems(Startup, spawn_ship)
-            .add_systems(Update, (check_collisions, check_runout))
+            .add_systems(Update, (check_collisions, check_runout, check_bounds))
             .add_systems(PostUpdate, (move_camera,));
     }
 }
@@ -73,7 +73,11 @@ fn spawn_ship(
             SpriteBundle {
                 texture: asset_server.load("ship.png"),
                 transform: Transform {
-                    translation: Vec3::new(0., 0., 1.),
+                    translation: Vec3::new(
+                        PLAYER_AREA_HALF_DIMENTION,
+                        PLAYER_AREA_HALF_DIMENTION,
+                        1.,
+                    ),
                     scale: Vec3::new(SHIP_SIZE, SHIP_SIZE, 1.),
                     ..default()
                 },
@@ -131,7 +135,7 @@ fn check_collisions(
             if event.a == ship {
                 if let Ok(alien) = alien_query.get(event.b) {
                     change_health_event_writer.send(ChangeHealthEvent::new(
-                        5.,
+                        0.,
                         ChangeHealthMode::Damage,
                         ship,
                     ));
@@ -154,6 +158,25 @@ fn check_runout(
                 commands.entity(ship_entity).despawn_recursive();
                 game_over_event_writer.send(GameOverEvent);
             }
+        }
+    }
+}
+
+const BOUND: f32 = PLAYER_AREA_HALF_DIMENTION * 2.;
+
+fn check_bounds(mut ship_query: Query<&mut Transform, With<Ship>>) {
+    if let Ok(mut ship_transform) = ship_query.get_single_mut() {
+        if ship_transform.translation.x > BOUND {
+            ship_transform.translation.x = 0.
+        }
+        if ship_transform.translation.x < 0. {
+            ship_transform.translation.x = BOUND
+        }
+        if ship_transform.translation.y > BOUND {
+            ship_transform.translation.y = 0.
+        }
+        if ship_transform.translation.y < 0. {
+            ship_transform.translation.y = BOUND
         }
     }
 }

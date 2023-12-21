@@ -35,9 +35,9 @@ impl Default for Alien {
     }
 }
 
-const SPAWN_RANGE: f32 = PLAYER_AREA_HALF_DIMENTION;
+const SPAWN_RANGE: f32 = PLAYER_AREA_HALF_DIMENTION * 2.;
 const SPAWN_DENSTIY: f32 = 0.00004;
-const NUM: u32 = (SPAWN_RANGE * SPAWN_RANGE * 4.0 * SPAWN_DENSTIY) as u32;
+const NUM: u32 = (SPAWN_RANGE * SPAWN_RANGE * SPAWN_DENSTIY) as u32;
 const SPEED: f32 = 100.0;
 pub const ALIEN_RADIUS: f32 = 15.;
 const ALIEN_SIZE: f32 = ALIEN_RADIUS * 2. / 64.;
@@ -54,8 +54,8 @@ fn spawn_aliens(
     for _ in 0..NUM {
         let forward = Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)).normalize();
 
-        let x: f32 = rng.gen_range(-SPAWN_RANGE..SPAWN_RANGE);
-        let y: f32 = rng.gen_range(-SPAWN_RANGE..SPAWN_RANGE);
+        let x: f32 = rng.gen_range(0.0..SPAWN_RANGE);
+        let y: f32 = rng.gen_range(0.0..SPAWN_RANGE);
 
         let alien_entity = commands
             .spawn((
@@ -281,15 +281,15 @@ const BOUND: f32 = SPAWN_RANGE;
 fn check_bounds(mut aliens_query: Query<&mut Transform, With<Alien>>) {
     for mut alien_transform in aliens_query.iter_mut() {
         if alien_transform.translation.x > BOUND {
-            alien_transform.translation.x = -BOUND
+            alien_transform.translation.x = 0.
         }
-        if alien_transform.translation.x < -BOUND {
+        if alien_transform.translation.x < 0. {
             alien_transform.translation.x = BOUND
         }
         if alien_transform.translation.y > BOUND {
-            alien_transform.translation.y = -BOUND
+            alien_transform.translation.y = 0.
         }
-        if alien_transform.translation.y < -BOUND {
+        if alien_transform.translation.y < 0. {
             alien_transform.translation.y = BOUND
         }
     }

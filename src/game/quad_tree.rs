@@ -7,7 +7,7 @@ pub struct QuadTreePlugin;
 impl Plugin for QuadTreePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(QuadTree::new(AABB::new(
-            Vec2::ZERO,
+            Vec2::new(PLAYER_AREA_HALF_DIMENTION, PLAYER_AREA_HALF_DIMENTION),
             PLAYER_AREA_HALF_DIMENTION,
         )))
         .add_systems(PreUpdate, buildtree);

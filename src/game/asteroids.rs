@@ -23,7 +23,7 @@ impl Asteroid {
     }
 }
 
-const SPAWN_RANGE: f32 = PLAYER_AREA_HALF_DIMENTION;
+const SPAWN_RANGE: f32 = PLAYER_AREA_HALF_DIMENTION * 2.;
 
 fn spawn_asteroids(
     mut commands: Commands,
@@ -39,8 +39,8 @@ fn spawn_asteroids(
                 mesh: meshes.add(shape::Circle::new(radius).into()).into(),
                 material: materials.add(ColorMaterial::from(Color::ORANGE_RED)),
                 transform: Transform::from_translation(Vec3::new(
-                    rng.gen_range(-SPAWN_RANGE..SPAWN_RANGE),
-                    rng.gen_range(-SPAWN_RANGE..SPAWN_RANGE),
+                    rng.gen_range(0.0..SPAWN_RANGE),
+                    rng.gen_range(0.0..SPAWN_RANGE),
                     0.1,
                 )),
                 ..default()
