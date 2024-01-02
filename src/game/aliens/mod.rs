@@ -1,17 +1,21 @@
+pub mod alien_avoid;
+
 use bevy::prelude::*;
 
 use num::clamp;
 use rand::prelude::*;
 use std::collections::HashMap;
 
+use alien_avoid::AARectAlienAvoid;
+
 use super::{
-    asteroids::Asteroid,
     health::{Health, HealthRunoutEvent},
     health_pack::SpawnHelthPackEvent,
     physics::{CircleCollider, CollisionLayerNames, CollisionLayers, Physics, Velocity},
     quad_tree::*,
     score::Score,
     ship::Ship,
+    world_generation::{world_to_grid, World},
     PLAYER_AREA_HALF_DIMENTION,
 };
 
@@ -36,7 +40,7 @@ impl Default for Alien {
 }
 
 const SPAWN_RANGE: f32 = PLAYER_AREA_HALF_DIMENTION * 2.;
-const SPAWN_DENSTIY: f32 = 0.00004;
+const SPAWN_DENSTIY: f32 = 0.00002;
 const NUM: u32 = (SPAWN_RANGE * SPAWN_RANGE * SPAWN_DENSTIY) as u32;
 const SPEED: f32 = 100.0;
 pub const ALIEN_RADIUS: f32 = 15.;
@@ -47,15 +51,21 @@ fn spawn_aliens(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut collision_layers: ResMut<CollisionLayers>,
+    world: Res<World>,
 ) {
     let mut rng = rand::thread_rng();
-    println!("{}", NUM);
 
     for _ in 0..NUM {
         let forward = Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)).normalize();
 
         let x: f32 = rng.gen_range(0.0..SPAWN_RANGE);
         let y: f32 = rng.gen_range(0.0..SPAWN_RANGE);
+
+        let (i, j) = world_to_grid(x, y);
+
+        if !world.world_data[i][j] {
+            continue;
+        }
 
         let alien_entity = commands
             .spawn((
@@ -82,18 +92,18 @@ fn spawn_aliens(
     }
 }
 
-const RADIUS: f32 = 100.0;
+const RADIUS: f32 = 200.0;
 const VISION_CONE_THRESHOLD: f32 = -0.7;
 const SEPERATION_RADIUS: f32 = 70.;
-const ROTATION_SPEED: f32 = 5.;
-const ASTEROID_SEPERATION_RADIUS: f32 = 50.;
-const SHIP_SEARCH_RADIUS: f32 = 300.;
+const ROTATION_SPEED: f32 = 8.;
+const ALIEN_AVOID_SEPERATION_RADIUS: f32 = 100.;
+const SHIP_SEARCH_RADIUS: f32 = 200.;
 
 const SEPERATION: f32 = 10.;
 const ALINGMENT: f32 = 3.;
 const COHESION: f32 = 1.;
-const ASTEROID_AVOIDANCE: f32 = 10.;
 const SHIP_SEARCH: f32 = 5.;
+const AARECT_AVOIDANCE: f32 = 50.;
 
 fn in_view(forward: Vec2, direction: Vec2) -> bool {
     direction.normalize().dot(forward.normalize()) > VISION_CONE_THRESHOLD
@@ -113,18 +123,9 @@ fn per_boid_calcs(
     current.2 += cohesion;
 }
 
-fn per_asteroid_calcs(
-    current: &mut (Vec2, Vec2, Vec2, Vec2),
-    direction: Vec2,
-    distance: f32,
-    asteroid_radius: f32,
-) {
+fn per_alien_avoid_calcs(current: &mut (Vec2, Vec2, Vec2, Vec2), direction: Vec2, distance: f32) {
     current.3 +=
-        (1. - clamp(
-            distance / (asteroid_radius + ASTEROID_SEPERATION_RADIUS),
-            0.,
-            1.,
-        )) * direction.normalize();
+        (1. - clamp(distance / ALIEN_AVOID_SEPERATION_RADIUS, 0., 1.)) * direction.normalize();
 }
 
 fn ship_search(
@@ -178,11 +179,12 @@ fn turn_towards(to_target: Vec2, forward: &mut Vec2, angle: f32) {
 fn boid_task(
     quad_tree: &Res<QuadTree>,
     alien_query: &Query<(Entity, &Transform, &mut Velocity), With<Alien>>,
-    asteroids_query: &Query<(&Transform, &Asteroid), With<Asteroid>>,
+    alien_avoid_query: &Query<(&Transform, &AARectAlienAvoid)>,
     transform_1: &Transform,
     velocity_1: &Velocity,
     alien_1: &Entity,
     near_aliens_map: &mut HashMap<u32, (Vec2, Vec2, Vec2, Vec2)>,
+    commands: &mut Commands,
 ) {
     for entity in quad_tree.query_range(&AABB::new(transform_1.translation.xy(), RADIUS)) {
         if let Ok((_, transform_2, velocity_2)) = alien_query.get(entity) {
@@ -204,20 +206,24 @@ fn boid_task(
                     }
                 }
             }
-        } else if let Ok((asteroid_transform, asteroid)) = asteroids_query.get(entity) {
-            let direction = (asteroid_transform.translation - transform_1.translation).xy();
-            let distance = direction.length();
-            if distance <= ASTEROID_SEPERATION_RADIUS + asteroid.radius {
+        } else if let Ok((rect_transform, rect_alien_avoid)) = alien_avoid_query.get(entity) {
+            let direction = (rect_transform.translation - transform_1.translation).xy();
+            let distance =
+                rect_alien_avoid.dist(transform_1.translation, rect_transform.translation);
+            if distance < 0. {
+                commands.entity(*alien_1).despawn();
+                println!("Alien crashed");
+            } else if distance <= ALIEN_AVOID_SEPERATION_RADIUS {
                 if in_view(velocity_1.0.xy(), direction) {
                     let near_aliens = near_aliens_map.get_mut(&alien_1.index());
 
                     match near_aliens {
                         Some(near_aliens) => {
-                            per_asteroid_calcs(near_aliens, direction, distance, asteroid.radius);
+                            per_alien_avoid_calcs(near_aliens, direction, distance);
                         }
                         None => {
                             let current = &mut (Vec2::ZERO, Vec2::ZERO, Vec2::ZERO, Vec2::ZERO);
-                            per_asteroid_calcs(current, direction, distance, asteroid.radius);
+                            per_alien_avoid_calcs(current, direction, distance);
                             near_aliens_map.insert(alien_1.index(), *current);
                         }
                     }
@@ -229,10 +235,11 @@ fn boid_task(
 
 fn simulate_boids(
     mut alien_query: Query<(Entity, &Transform, &mut Velocity), With<Alien>>,
-    asteroids_query: Query<(&Transform, &Asteroid), With<Asteroid>>,
+    alien_avoid_query: Query<(&Transform, &AARectAlienAvoid)>,
     ship_query: Query<&Transform, With<Ship>>,
     time: Res<Time>,
     quad_tree: Res<QuadTree>,
+    mut commands: Commands,
 ) {
     let mut near_aliens_map: HashMap<u32, (Vec2, Vec2, Vec2, Vec2)> = HashMap::new();
 
@@ -242,11 +249,12 @@ fn simulate_boids(
         boid_task(
             &quad_tree,
             &alien_query,
-            &asteroids_query,
+            &alien_avoid_query,
             &transform_1,
             &velocity_1,
             &alien_1,
             &mut near_aliens_map,
+            &mut commands,
         )
     }
 
@@ -256,10 +264,10 @@ fn simulate_boids(
         let near_aliens = near_aliens_map.get(&alien_entity.index());
         match near_aliens {
             Some(near_aliens) => {
-                turn_target = -SEPERATION * near_aliens.0
+                turn_target = -SEPERATION * (near_aliens.0.normalize_or_zero())
                     + ALINGMENT * (near_aliens.1.normalize_or_zero())
                     + COHESION * (near_aliens.2.normalize_or_zero())
-                    + -ASTEROID_AVOIDANCE * (near_aliens.3.normalize_or_zero())
+                    + -AARECT_AVOIDANCE * near_aliens.3
             }
             None => {}
         }
