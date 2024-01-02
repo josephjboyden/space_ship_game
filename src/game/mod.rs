@@ -8,6 +8,7 @@ mod player;
 mod quad_tree;
 pub mod score;
 pub mod ship;
+mod world_generation;
 
 use bevy::{core_pipeline::clear_color::ClearColorConfig, prelude::*};
 
@@ -20,6 +21,7 @@ use physics::PhysicsPlugin;
 use player::PlayerPlugin;
 use score::Score;
 use ship::ShipPlugin;
+use world_generation::WorldGenerationPlugin;
 
 use crate::MainCamera;
 
@@ -32,12 +34,13 @@ impl Plugin for GamePlugin {
             .add_plugins((
                 PhysicsPlugin,
                 ShipPlugin,
-                AsteroidsPlugin,
+                //AsteroidsPlugin,
                 AliensPlugin,
                 PlayerPlugin,
                 HUDPlugin,
                 HealthPlugin,
                 HealthPackPlugin,
+                WorldGenerationPlugin,
             ))
             .add_systems(Update, loop_camera);
     }
@@ -46,7 +49,7 @@ impl Plugin for GamePlugin {
 #[derive(Event)]
 pub struct GameOverEvent;
 
-pub const PLAYER_AREA_HALF_DIMENTION: f32 = 2000.;
+pub const PLAYER_AREA_HALF_DIMENTION: f32 = 5000.;
 
 #[derive(Component)]
 struct SecondaryCamera;
@@ -105,22 +108,22 @@ fn loop_camera(
     >,
     window_query: Query<&Window>,
     mut tertiary_camera_query: Query<(Entity, &mut Transform), With<TertiaryCamera>>,
-    mut gizmos: Gizmos,
+    //mut gizmos: Gizmos,
 ) {
     let window = window_query.single();
 
     if let Ok(main_camera_transform) = main_camera_query.get_single_mut() {
         let half_width = window.resolution.width() / 2.;
         let half_height = window.resolution.height() / 2.;
-        gizmos.rect_2d(
-            Vec2::new(PLAYER_AREA_HALF_DIMENTION, PLAYER_AREA_HALF_DIMENTION),
-            0.,
-            Vec2::new(
-                PLAYER_AREA_HALF_DIMENTION * 2.,
-                PLAYER_AREA_HALF_DIMENTION * 2.,
-            ),
-            Color::YELLOW,
-        );
+        //gizmos.rect_2d(
+        //     Vec2::new(PLAYER_AREA_HALF_DIMENTION, PLAYER_AREA_HALF_DIMENTION),
+        //     0.,
+        //     Vec2::new(
+        //         PLAYER_AREA_HALF_DIMENTION * 2.,
+        //         PLAYER_AREA_HALF_DIMENTION * 2.,
+        //     ),
+        //     Color::YELLOW,
+        // );
         if let Ok((secondary_camera_entity, mut secondary_camera_transform)) =
             secondary_camera_query.get_single_mut()
         {
