@@ -13,7 +13,6 @@ mod world_generation;
 use bevy::{core_pipeline::clear_color::ClearColorConfig, prelude::*};
 
 use aliens::AliensPlugin;
-use asteroids::AsteroidsPlugin;
 use health::HealthPlugin;
 use health_pack::HealthPackPlugin;
 use hud::HUDPlugin;
@@ -34,7 +33,6 @@ impl Plugin for GamePlugin {
             .add_plugins((
                 PhysicsPlugin,
                 ShipPlugin,
-                //AsteroidsPlugin,
                 AliensPlugin,
                 PlayerPlugin,
                 HUDPlugin,

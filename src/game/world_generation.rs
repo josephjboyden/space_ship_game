@@ -1,4 +1,4 @@
-use bevy::{math, prelude::*};
+use bevy::prelude::*;
 use noise::{NoiseFn, OpenSimplex};
 
 use super::PLAYER_AREA_HALF_DIMENTION;
