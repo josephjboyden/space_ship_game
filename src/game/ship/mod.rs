@@ -91,7 +91,7 @@ fn spawn_ship(
             Velocity::default(),
             Ship::default(),
             Health::new(100.),
-            CircleCollider::new(30., CollisionLayerNames::Ship),
+            CircleCollider::new(15., CollisionLayerNames::Ship),
         ))
         .with_children(|parent| {
             parent.spawn((

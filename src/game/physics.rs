@@ -12,16 +12,19 @@ impl Plugin for PhysicsPlugin {
             .insert_resource(CollisionLayers::default())
             .configure_sets(
                 FixedUpdate,
-                PhysicsSet::CollisionDetection.after(PhysicsSet::Movement),
+                (
+                    PhysicsSet::CollisionDetection.after(PhysicsSet::Movement),
+                    PhysicsSet::CollisionHandling.after(PhysicsSet::CollisionDetection),
+                ),
             )
-            //.add_systems(Update, draw_colliders)
+            .add_systems(Update, draw_colliders)
             .add_systems(
                 FixedUpdate,
                 (
                     acceleration_physics_update.in_set(PhysicsSet::Movement),
                     velocity_physics_update.in_set(PhysicsSet::Movement),
                     find_collisions.in_set(PhysicsSet::CollisionDetection),
-                    handle_collisions,
+                    handle_collisions.in_set(PhysicsSet::CollisionHandling),
                 ),
             );
     }
@@ -31,6 +34,7 @@ impl Plugin for PhysicsPlugin {
 enum PhysicsSet {
     Movement,
     CollisionDetection,
+    CollisionHandling,
 }
 
 #[derive(Component)]
@@ -154,7 +158,7 @@ impl AARectCollider {
         (Vec2::ZERO.max(d)).length() + (d.x.max(d.y)).min(0.)
     }
 
-    pub fn nearest_point(&self, point: Vec2, translation: Vec2) -> Vec2 {
+    pub fn nearest_point(&self, point: Vec2, translation: Vec2) -> (Vec2, bool) {
         let tl = translation - self.half_size;
         let br = translation + self.half_size;
         let inside_x = tl.x < point.x && point.x < br.x;
@@ -162,7 +166,10 @@ impl AARectCollider {
         let point_inside_rectangle = inside_x && inside_y;
 
         if !point_inside_rectangle {
-            return Vec2::new(tl.x.max(point.x.min(br.x)), tl.y.max(point.y.min(br.y)));
+            return (
+                Vec2::new(tl.x.max(point.x.min(br.x)), tl.y.max(point.y.min(br.y))),
+                false,
+            );
         } else {
             let distance_to_positive_bounds = br - point;
             let distance_to_negative_bounds = tl - point;
@@ -175,13 +182,13 @@ impl AARectCollider {
             let smallest_distance = smallest_x.min(smallest_y);
 
             if smallest_distance == distance_to_positive_bounds.x {
-                return Vec2::new(br.x, point.y);
+                return (Vec2::new(br.x, point.y), true);
             } else if smallest_distance == distance_to_negative_bounds.x {
-                return Vec2::new(tl.x, point.y);
+                return (Vec2::new(tl.x, point.y), true);
             } else if smallest_distance == distance_to_positive_bounds.y {
-                return Vec2::new(point.x, br.y);
+                return (Vec2::new(point.x, br.y), true);
             } else {
-                return Vec2::new(point.x, tl.y);
+                return (Vec2::new(point.x, tl.y), true);
             }
         }
     }
@@ -205,18 +212,18 @@ fn circle_aa_rect_collision(
     b.dist(a_translation, b_translation) <= a.radius
 }
 
-// fn draw_colliders(
-//     mut gizmos: Gizmos,
-//     circle_collider_query: Query<(&Transform, &CircleCollider), Without<AARectCollider>>,
-//     aa_rect_collider_query: Query<(&Transform, &AARectCollider), Without<CircleCollider>>,
-// ) {
-//     for (transform, collider) in circle_collider_query.iter() {
-//         gizmos.circle_2d(transform.translation.xy(), collider.radius, Color::RED);
-//     }
-//     for (transform, collider) in aa_rect_collider_query.iter() {
-//         gizmos.rect_2d(transform.translation.xy(), 0., collider.size, Color::RED);
-//     }
-// }
+fn draw_colliders(
+    mut gizmos: Gizmos,
+    circle_collider_query: Query<(&Transform, &CircleCollider), Without<AARectCollider>>,
+    aa_rect_collider_query: Query<(&Transform, &AARectCollider), Without<CircleCollider>>,
+) {
+    for (transform, collider) in circle_collider_query.iter() {
+        gizmos.circle_2d(transform.translation.xy(), collider.radius, Color::RED);
+    }
+    for (transform, collider) in aa_rect_collider_query.iter() {
+        gizmos.rect_2d(transform.translation.xy(), 0., collider.size, Color::RED);
+    }
+}
 
 #[derive(FromPrimitive, Clone, Copy, PartialEq, Eq)]
 pub enum CollisionLayerNames {
@@ -255,7 +262,7 @@ impl Default for CollisionLayers {
                     CollisionLayerNames::Aliens,
                     CollisionLayerNames::Walls,
                 ]),
-                CollisionLayer::new(vec![]),
+                CollisionLayer::new(vec![CollisionLayerNames::Walls]),
                 CollisionLayer::new(vec![]),
                 CollisionLayer::new(vec![]),
             ],
@@ -304,7 +311,7 @@ fn find_collisions(
     }
 }
 
-const COLLIDER_CHECK_DISTANCE: f32 = 30.; //must be larger than max radius of the largest collider
+const COLLIDER_CHECK_DISTANCE: f32 = 100.; //must be larger than max radius of the largest collider
 fn handle_circle_collisions(
     a: &CircleCollider,
     a_translation: Vec2,
@@ -352,10 +359,15 @@ fn handle_collisions(
             if physics_a.use_collisions {
                 if let Ok((transform_b, collider_b)) = rect_query.get(event.b) {
                     let p = transform_a.translation.xy();
-                    let contact_point = collider_b.nearest_point(p, transform_b.translation.xy());
+                    let (contact_point, in_rect) =
+                        collider_b.nearest_point(p, transform_b.translation.xy());
                     let mut normal = p - contact_point;
-                    let distance = normal.length();
+                    let mut distance = normal.length();
                     normal = normal.normalize();
+                    if in_rect {
+                        normal *= -1.;
+                        distance *= -1.;
+                    }
 
                     let offset = normal * (collider_a.radius - distance);
                     transform_a.translation += Vec3::new(offset.x, offset.y, 0.);

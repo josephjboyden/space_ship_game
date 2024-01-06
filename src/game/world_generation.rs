@@ -17,9 +17,9 @@ impl Plugin for WorldGenerationPlugin {
     }
 }
 
-const N: usize = 200;
+const N: usize = (PLAYER_AREA_HALF_DIMENTION * 2.0 / 50.0) as usize;
 const M: usize = N;
-const ZOOM: f64 = 1.;
+const ZOOM: f64 = 5000. / PLAYER_AREA_HALF_DIMENTION as f64;
 const THREASHOLD_A: f32 = 0.;
 const THREASHOLD_B: f32 = 0.3;
 

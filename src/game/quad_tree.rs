@@ -10,8 +10,8 @@ impl Plugin for QuadTreePlugin {
             Vec2::new(PLAYER_AREA_HALF_DIMENTION, PLAYER_AREA_HALF_DIMENTION),
             PLAYER_AREA_HALF_DIMENTION,
         )))
-        .add_systems(PreUpdate, buildtree);
-        //.add_systems(Update, render_tree);
+        //.add_systems(Update, render_tree)
+        .add_systems(FixedUpdate, buildtree);
     }
 }
 
@@ -185,18 +185,20 @@ fn buildtree(
     }
 }
 
-// fn render_tree(
-//     mut gizmos: Gizmos,
-//     quad_tree: Res<QuadTree>,
-// ) {
+// fn render_tree(mut gizmos: Gizmos, quad_tree: Res<QuadTree>) {
 //     render_sub_tree(&mut gizmos, quad_tree.into_inner())
 // }
 
-// fn render_sub_tree(
-//     gizmos: &mut Gizmos,
-//     quad_tree: &QuadTree,
-// ) {
-//     gizmos.rect_2d(quad_tree.boundry.center, 0., Vec2::new(quad_tree.boundry.half_dimention, quad_tree.boundry.half_dimention)*2., Color::GREEN);
+// fn render_sub_tree(gizmos: &mut Gizmos, quad_tree: &QuadTree) {
+//     gizmos.rect_2d(
+//         quad_tree.boundry.center,
+//         0.,
+//         Vec2::new(
+//             quad_tree.boundry.half_dimention,
+//             quad_tree.boundry.half_dimention,
+//         ) * 2.,
+//         Color::GREEN,
+//     );
 //     if let Some(subtrees) = &quad_tree.subtrees {
 //         render_sub_tree(gizmos, &subtrees.0);
 //         render_sub_tree(gizmos, &subtrees.1);

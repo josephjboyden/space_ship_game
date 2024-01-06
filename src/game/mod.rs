@@ -47,7 +47,7 @@ impl Plugin for GamePlugin {
 #[derive(Event)]
 pub struct GameOverEvent;
 
-pub const PLAYER_AREA_HALF_DIMENTION: f32 = 5000.;
+pub const PLAYER_AREA_HALF_DIMENTION: f32 = 1000.;
 
 #[derive(Component)]
 struct SecondaryCamera;

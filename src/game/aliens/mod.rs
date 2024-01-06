@@ -78,7 +78,7 @@ fn spawn_aliens(
                     },
                     ..default()
                 },
-                Physics::default(),
+                Physics::new(true),
                 Velocity(forward * SPEED),
                 Alien::default(),
                 CircleCollider::new(15., CollisionLayerNames::Aliens),
@@ -103,7 +103,7 @@ const SEPERATION: f32 = 10.;
 const ALINGMENT: f32 = 3.;
 const COHESION: f32 = 1.;
 const SHIP_SEARCH: f32 = 5.;
-const AARECT_AVOIDANCE: f32 = 50.;
+const AARECT_AVOIDANCE: f32 = 10.;
 
 fn in_view(forward: Vec2, direction: Vec2) -> bool {
     direction.normalize().dot(forward.normalize()) > VISION_CONE_THRESHOLD
@@ -184,7 +184,6 @@ fn boid_task(
     velocity_1: &Velocity,
     alien_1: &Entity,
     near_aliens_map: &mut HashMap<u32, (Vec2, Vec2, Vec2, Vec2)>,
-    commands: &mut Commands,
 ) {
     for entity in quad_tree.query_range(&AABB::new(transform_1.translation.xy(), RADIUS)) {
         if let Ok((_, transform_2, velocity_2)) = alien_query.get(entity) {
@@ -210,9 +209,7 @@ fn boid_task(
             let direction = (rect_transform.translation - transform_1.translation).xy();
             let distance =
                 rect_alien_avoid.dist(transform_1.translation, rect_transform.translation);
-            if distance < 0. {
-                commands.entity(*alien_1).despawn();
-            } else if distance <= ALIEN_AVOID_SEPERATION_RADIUS {
+            if distance <= ALIEN_AVOID_SEPERATION_RADIUS {
                 if in_view(velocity_1.0.xy(), direction) {
                     let near_aliens = near_aliens_map.get_mut(&alien_1.index());
 
@@ -238,7 +235,6 @@ fn simulate_boids(
     ship_query: Query<&Transform, With<Ship>>,
     time: Res<Time>,
     quad_tree: Res<QuadTree>,
-    mut commands: Commands,
 ) {
     let mut near_aliens_map: HashMap<u32, (Vec2, Vec2, Vec2, Vec2)> = HashMap::new();
 
@@ -253,7 +249,6 @@ fn simulate_boids(
             &velocity_1,
             &alien_1,
             &mut near_aliens_map,
-            &mut commands,
         )
     }
 
@@ -280,6 +275,8 @@ fn simulate_boids(
             &mut alien_velocity.0,
             time.delta_seconds() * ROTATION_SPEED,
         );
+
+        alien_velocity.0 = alien_velocity.0.normalize() * SPEED;
     }
 }
 
