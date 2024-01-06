@@ -2,7 +2,10 @@ use bevy::prelude::*;
 use noise::{NoiseFn, OpenSimplex};
 
 use super::{
-    aliens::alien_avoid::AARectAlienAvoid, quad_tree::QuadTreeElement, PLAYER_AREA_HALF_DIMENTION,
+    aliens::alien_avoid::AARectAlienAvoid,
+    physics::{AARectCollider, CollisionLayerNames, CollisionLayers},
+    quad_tree::QuadTreeElement,
+    PLAYER_AREA_HALF_DIMENTION,
 };
 
 pub struct WorldGenerationPlugin;
@@ -32,7 +35,7 @@ pub struct World {
 
 impl World {
     fn generate() -> Self {
-        let noise = OpenSimplex::new(1);
+        let noise = OpenSimplex::new(7);
         let mut world_data: [[bool; M]; N] = [[false; M]; N];
 
         for j in 0..M {
@@ -59,29 +62,42 @@ impl World {
     }
 }
 
-fn show_world(mut commands: Commands, world: Res<World>) {
+fn show_world(
+    mut commands: Commands,
+    world: Res<World>,
+    mut collision_layers: ResMut<CollisionLayers>,
+) {
     for j in 0..M {
         for i in 0..N {
             if !world.world_data[i][j] {
-                commands.spawn((
-                    SpriteBundle {
-                        sprite: Sprite {
-                            color: Color::rgb(1., 1., 1.),
-                            custom_size: Some(Vec2::new(TILE_WIDTH, TILE_HEIGHT)),
+                let wall_entity = commands
+                    .spawn((
+                        SpriteBundle {
+                            sprite: Sprite {
+                                color: Color::rgb(1., 1., 1.),
+                                custom_size: Some(Vec2::new(TILE_WIDTH, TILE_HEIGHT)),
+                                ..default()
+                            },
+                            transform: Transform::from_translation(Vec3::new(
+                                TILE_WIDTH * i as f32,
+                                TILE_HEIGHT * j as f32,
+                                0.,
+                            )),
                             ..default()
                         },
-                        transform: Transform::from_translation(Vec3::new(
-                            TILE_WIDTH * i as f32,
-                            TILE_HEIGHT * j as f32,
-                            0.,
-                        )),
-                        ..default()
-                    },
-                    AARectAlienAvoid {
-                        half_size: Vec2::new(TILE_WIDTH, TILE_HEIGHT) / 2.,
-                    },
-                    QuadTreeElement,
-                ));
+                        AARectAlienAvoid {
+                            half_size: Vec2::new(TILE_WIDTH, TILE_HEIGHT) / 2.,
+                        },
+                        QuadTreeElement,
+                        AARectCollider::new(
+                            Vec2::new(TILE_WIDTH, TILE_HEIGHT),
+                            CollisionLayerNames::Walls,
+                        ),
+                    ))
+                    .id();
+                collision_layers.layers[CollisionLayerNames::Walls as usize]
+                    .in_layer
+                    .push(wall_entity);
             }
         }
     }

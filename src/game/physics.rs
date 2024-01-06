@@ -7,26 +7,50 @@ pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<CollideEvent>()
+        app.insert_resource(Time::<Fixed>::from_seconds(0.005))
+            .add_event::<CollideEvent>()
             .insert_resource(CollisionLayers::default())
+            .configure_sets(
+                FixedUpdate,
+                PhysicsSet::CollisionDetection.after(PhysicsSet::Movement),
+            )
+            //.add_systems(Update, draw_colliders)
             .add_systems(
-                Update,
+                FixedUpdate,
                 (
-                    acceleration_physics_update,
-                    velocity_physics_update,
+                    acceleration_physics_update.in_set(PhysicsSet::Movement),
+                    velocity_physics_update.in_set(PhysicsSet::Movement),
+                    find_collisions.in_set(PhysicsSet::CollisionDetection),
                     handle_collisions,
-                    //draw_colliders
                 ),
             );
     }
 }
 
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+enum PhysicsSet {
+    Movement,
+    CollisionDetection,
+}
+
 #[derive(Component)]
-pub struct Physics;
+pub struct Physics {
+    use_collisions: bool,
+}
 
 impl Default for Physics {
     fn default() -> Self {
-        Physics
+        Self {
+            use_collisions: false,
+        }
+    }
+}
+
+impl Physics {
+    pub fn new(use_collisions: bool) -> Self {
+        Self {
+            use_collisions: use_collisions,
+        }
     }
 }
 
@@ -56,11 +80,10 @@ impl Default for Acceleration {
 
 fn acceleration_physics_update(
     mut physics_query: Query<(&mut Transform, &mut Velocity, &Acceleration), With<Physics>>,
-    time: Res<Time>,
+    time: Res<Time<Fixed>>,
 ) {
+    let delta_time = time.delta_seconds();
     for (mut transform, mut velocity, acceleration) in physics_query.iter_mut() {
-        let delta_time = time.delta_seconds();
-
         let mut a = acceleration.value.clone();
         if acceleration.local {
             a = transform
@@ -108,21 +131,90 @@ impl CircleCollider {
     }
 }
 
+#[derive(Component)]
+pub struct AARectCollider {
+    pub size: Vec2,
+    half_size: Vec2,
+    layer: CollisionLayerNames,
+}
+
+impl AARectCollider {
+    pub fn new(size: Vec2, layer: CollisionLayerNames) -> Self {
+        Self {
+            size: size,
+            half_size: size / 2.,
+            layer: layer,
+        }
+    }
+
+    pub fn dist(&self, point: Vec2, translation: Vec2) -> f32 {
+        let tl = translation - self.half_size;
+        let br = translation + self.half_size;
+        let d = (tl - point).max(point - br);
+        (Vec2::ZERO.max(d)).length() + (d.x.max(d.y)).min(0.)
+    }
+
+    pub fn nearest_point(&self, point: Vec2, translation: Vec2) -> Vec2 {
+        let tl = translation - self.half_size;
+        let br = translation + self.half_size;
+        let inside_x = tl.x < point.x && point.x < br.x;
+        let inside_y = tl.y < point.y && point.y < br.y;
+        let point_inside_rectangle = inside_x && inside_y;
+
+        if !point_inside_rectangle {
+            return Vec2::new(tl.x.max(point.x.min(br.x)), tl.y.max(point.y.min(br.y)));
+        } else {
+            let distance_to_positive_bounds = br - point;
+            let distance_to_negative_bounds = tl - point;
+            let smallest_x = distance_to_positive_bounds
+                .x
+                .min(distance_to_negative_bounds.x);
+            let smallest_y = distance_to_positive_bounds
+                .y
+                .min(distance_to_negative_bounds.y);
+            let smallest_distance = smallest_x.min(smallest_y);
+
+            if smallest_distance == distance_to_positive_bounds.x {
+                return Vec2::new(br.x, point.y);
+            } else if smallest_distance == distance_to_negative_bounds.x {
+                return Vec2::new(tl.x, point.y);
+            } else if smallest_distance == distance_to_positive_bounds.y {
+                return Vec2::new(point.x, br.y);
+            } else {
+                return Vec2::new(point.x, tl.y);
+            }
+        }
+    }
+}
+
 fn circle_circle_collision(
     a: &CircleCollider,
     a_translation: Vec2,
     b: &CircleCollider,
     b_translation: Vec2,
 ) -> bool {
-    (a_translation - b_translation).length() < a.radius + b.radius
+    (a_translation - b_translation).length() <= a.radius + b.radius
+}
+
+fn circle_aa_rect_collision(
+    a: &CircleCollider,
+    a_translation: Vec2,
+    b: &AARectCollider,
+    b_translation: Vec2,
+) -> bool {
+    b.dist(a_translation, b_translation) <= a.radius
 }
 
 // fn draw_colliders(
 //     mut gizmos: Gizmos,
-//     circle_collider_query: Query<(&Transform, &CircleCollider)>
+//     circle_collider_query: Query<(&Transform, &CircleCollider), Without<AARectCollider>>,
+//     aa_rect_collider_query: Query<(&Transform, &AARectCollider), Without<CircleCollider>>,
 // ) {
 //     for (transform, collider) in circle_collider_query.iter() {
 //         gizmos.circle_2d(transform.translation.xy(), collider.radius, Color::RED);
+//     }
+//     for (transform, collider) in aa_rect_collider_query.iter() {
+//         gizmos.rect_2d(transform.translation.xy(), 0., collider.size, Color::RED);
 //     }
 // }
 
@@ -132,6 +224,7 @@ pub enum CollisionLayerNames {
     Ship,
     Aliens,
     HealthPacks,
+    Walls,
 }
 
 pub struct CollisionLayer {
@@ -156,11 +249,13 @@ impl Default for CollisionLayers {
     fn default() -> Self {
         Self {
             layers: vec![
-                CollisionLayer::new(vec![CollisionLayerNames::Aliens]), //match enum order
+                CollisionLayer::new(vec![CollisionLayerNames::Aliens]), //match enum order and length
                 CollisionLayer::new(vec![
                     CollisionLayerNames::HealthPacks,
                     CollisionLayerNames::Aliens,
+                    CollisionLayerNames::Walls,
                 ]),
+                CollisionLayer::new(vec![]),
                 CollisionLayer::new(vec![]),
                 CollisionLayer::new(vec![]),
             ],
@@ -180,8 +275,9 @@ impl CollideEvent {
     }
 }
 
-fn handle_collisions(
+fn find_collisions(
     circle_collider_query: Query<(&CircleCollider, &Transform)>,
+    aa_rect_collider_query: Query<(&AARectCollider, &Transform)>,
     collision_layers: Res<CollisionLayers>,
     quad_tree: Res<QuadTree>,
     mut collide_event_writer: EventWriter<CollideEvent>,
@@ -198,6 +294,7 @@ fn handle_collisions(
                     transform.translation.xy(),
                     &entity,
                     &circle_collider_query,
+                    &aa_rect_collider_query,
                     &quad_tree,
                     &mut collide_event_writer,
                     &layer.collides_with,
@@ -213,6 +310,7 @@ fn handle_circle_collisions(
     a_translation: Vec2,
     a_entity: &Entity,
     circle_collider_query: &Query<(&CircleCollider, &Transform)>,
+    aa_rect_collider_query: &Query<(&AARectCollider, &Transform)>,
     quad_tree: &Res<QuadTree>,
     collide_event_writer: &mut EventWriter<CollideEvent>,
     collides_with: &Vec<CollisionLayerNames>,
@@ -224,7 +322,46 @@ fn handle_circle_collisions(
         if let Ok((b, b_transform)) = circle_collider_query.get(b_entity) {
             if collides_with.contains(&b.layer) {
                 if circle_circle_collision(a, a_translation, b, b_transform.translation.xy()) {
-                    collide_event_writer.send(CollideEvent::new(*a_entity, b_entity))
+                    collide_event_writer.send(CollideEvent::new(*a_entity, b_entity));
+                }
+            }
+        } else if let Ok((b, b_transform)) = aa_rect_collider_query.get(b_entity) {
+            if collides_with.contains(&b.layer) {
+                if circle_aa_rect_collision(a, a_translation, b, b_transform.translation.xy()) {
+                    collide_event_writer.send(CollideEvent::new(*a_entity, b_entity));
+                }
+            }
+        }
+    }
+}
+
+fn handle_collisions(
+    //only works when a is circle collider and b is rect collider
+    //undefined behaviour when two "use_collisions" entities collide
+    mut collide_event_reader: EventReader<CollideEvent>,
+    mut circle_query: Query<
+        (&Physics, &mut Transform, &CircleCollider, &mut Velocity),
+        Without<AARectCollider>,
+    >,
+    rect_query: Query<(&Transform, &AARectCollider), Without<CircleCollider>>,
+) {
+    for event in collide_event_reader.read() {
+        if let Ok((physics_a, mut transform_a, collider_a, mut velocity_a)) =
+            circle_query.get_mut(event.a)
+        {
+            if physics_a.use_collisions {
+                if let Ok((transform_b, collider_b)) = rect_query.get(event.b) {
+                    let p = transform_a.translation.xy();
+                    let contact_point = collider_b.nearest_point(p, transform_b.translation.xy());
+                    let mut normal = p - contact_point;
+                    let distance = normal.length();
+                    normal = normal.normalize();
+
+                    let offset = normal * (collider_a.radius - distance);
+                    transform_a.translation += Vec3::new(offset.x, offset.y, 0.);
+
+                    let dot_product = normal.dot(velocity_a.0);
+                    velocity_a.0 -= normal * dot_product;
                 }
             }
         }

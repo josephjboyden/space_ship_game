@@ -83,7 +83,7 @@ fn spawn_ship(
                 },
                 ..default()
             },
-            Physics::default(),
+            Physics::new(true),
             Acceleration {
                 local: true,
                 ..default()

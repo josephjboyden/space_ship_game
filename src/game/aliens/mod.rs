@@ -212,7 +212,6 @@ fn boid_task(
                 rect_alien_avoid.dist(transform_1.translation, rect_transform.translation);
             if distance < 0. {
                 commands.entity(*alien_1).despawn();
-                println!("Alien crashed");
             } else if distance <= ALIEN_AVOID_SEPERATION_RADIUS {
                 if in_view(velocity_1.0.xy(), direction) {
                     let near_aliens = near_aliens_map.get_mut(&alien_1.index());
