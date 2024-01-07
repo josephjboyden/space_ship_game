@@ -6,8 +6,19 @@ impl Plugin for HealthPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<HealthRunoutEvent>()
             .add_event::<ChangeHealthEvent>()
-            .add_systems(Update, change_health);
+            .configure_sets(
+                Update,
+                (HealthSet::Write, HealthSet::Change, HealthSet::Read).chain(),
+            )
+            .add_systems(Update, change_health.in_set(HealthSet::Change));
     }
+}
+
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+pub enum HealthSet {
+    Write,
+    Change,
+    Read,
 }
 
 #[derive(Component)]

@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use alien_avoid::AARectAlienAvoid;
 
 use super::{
-    health::{Health, HealthRunoutEvent},
+    health::{Health, HealthRunoutEvent, HealthSet},
     health_pack::SpawnHelthPackEvent,
     physics::{CircleCollider, CollisionLayerNames, CollisionLayers, Physics, Velocity},
     quad_tree::*,
@@ -25,7 +25,14 @@ impl Plugin for AliensPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(QuadTreePlugin)
             .add_systems(Startup, spawn_aliens)
-            .add_systems(Update, (simulate_boids, check_bounds, check_runout))
+            .add_systems(
+                Update,
+                (
+                    simulate_boids,
+                    check_bounds,
+                    check_health_runout.in_set(HealthSet::Read),
+                ),
+            )
             .add_systems(PostUpdate, point_to_velocity);
     }
 }
@@ -42,7 +49,7 @@ impl Default for Alien {
 const SPAWN_RANGE: f32 = PLAYER_AREA_HALF_DIMENTION * 2.;
 const SPAWN_DENSTIY: f32 = 0.00002;
 const NUM: u32 = (SPAWN_RANGE * SPAWN_RANGE * SPAWN_DENSTIY) as u32;
-const SPEED: f32 = 100.0;
+const SPEED: f32 = 200.0;
 pub const ALIEN_RADIUS: f32 = 15.;
 const ALIEN_SIZE: f32 = ALIEN_RADIUS * 2. / 64.;
 const HEALTH: f32 = 1.0;
@@ -54,7 +61,7 @@ fn spawn_aliens(
     world: Res<World>,
 ) {
     let mut rng = rand::thread_rng();
-
+    let mut count: usize = 0;
     for _ in 0..NUM {
         let forward = Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)).normalize();
 
@@ -66,6 +73,8 @@ fn spawn_aliens(
         if !world.world_data[i][j] {
             continue;
         }
+
+        count += 1;
 
         let alien_entity = commands
             .spawn((
@@ -90,6 +99,7 @@ fn spawn_aliens(
             .in_layer
             .push(alien_entity);
     }
+    println!("num of aliens: {}", count)
 }
 
 const RADIUS: f32 = 200.0;
@@ -305,16 +315,16 @@ fn point_to_velocity(mut alien_query: Query<(&Velocity, &mut Transform), With<Al
     }
 }
 
-fn check_runout(
+fn check_health_runout(
     mut commands: Commands,
     mut health_runout_event_reader: EventReader<HealthRunoutEvent>,
-    alien_query: Query<(Entity, &Transform), With<Alien>>,
+    alien_query: Query<&Transform, With<Alien>>,
     mut score: ResMut<Score>,
     mut spawn_health_pack_event_writer: EventWriter<SpawnHelthPackEvent>,
 ) {
     for event in health_runout_event_reader.read() {
-        if let Ok((alien_entity, alien_transform)) = alien_query.get(event.0) {
-            commands.entity(alien_entity).despawn();
+        if let Ok(alien_transform) = alien_query.get(event.0) {
+            commands.entity(event.0).despawn();
             score.0 += 1;
             spawn_health_pack_event_writer
                 .send(SpawnHelthPackEvent::new(alien_transform.translation.xy()))

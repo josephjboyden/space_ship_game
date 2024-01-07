@@ -8,19 +8,26 @@ pub struct PhysicsPlugin;
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(Time::<Fixed>::from_seconds(0.005))
+            .insert_resource(CollideEventsThisFrame(vec![]))
             .add_event::<CollideEvent>()
+            .add_event::<UniqueCollideEvent>()
+            .add_event::<AddImpulseEvent>()
             .insert_resource(CollisionLayers::default())
             .configure_sets(
                 FixedUpdate,
                 (
-                    PhysicsSet::CollisionDetection.after(PhysicsSet::Movement),
-                    PhysicsSet::CollisionHandling.after(PhysicsSet::CollisionDetection),
-                ),
+                    PhysicsSet::Changes,
+                    PhysicsSet::Movement,
+                    PhysicsSet::CollisionDetection,
+                    PhysicsSet::CollisionHandling,
+                )
+                    .chain(),
             )
-            .add_systems(Update, draw_colliders)
+            //.add_systems(Update, draw_colliders)
             .add_systems(
                 FixedUpdate,
                 (
+                    apply_impulse.in_set(PhysicsSet::Changes),
                     acceleration_physics_update.in_set(PhysicsSet::Movement),
                     velocity_physics_update.in_set(PhysicsSet::Movement),
                     find_collisions.in_set(PhysicsSet::CollisionDetection),
@@ -32,6 +39,7 @@ impl Plugin for PhysicsPlugin {
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 enum PhysicsSet {
+    Changes,
     Movement,
     CollisionDetection,
     CollisionHandling,
@@ -81,6 +89,9 @@ impl Default for Acceleration {
         }
     }
 }
+
+#[derive(Component, Default)]
+pub struct Mass(pub f32);
 
 fn acceleration_physics_update(
     mut physics_query: Query<(&mut Transform, &mut Velocity, &Acceleration), With<Physics>>,
@@ -212,18 +223,18 @@ fn circle_aa_rect_collision(
     b.dist(a_translation, b_translation) <= a.radius
 }
 
-fn draw_colliders(
-    mut gizmos: Gizmos,
-    circle_collider_query: Query<(&Transform, &CircleCollider), Without<AARectCollider>>,
-    aa_rect_collider_query: Query<(&Transform, &AARectCollider), Without<CircleCollider>>,
-) {
-    for (transform, collider) in circle_collider_query.iter() {
-        gizmos.circle_2d(transform.translation.xy(), collider.radius, Color::RED);
-    }
-    for (transform, collider) in aa_rect_collider_query.iter() {
-        gizmos.rect_2d(transform.translation.xy(), 0., collider.size, Color::RED);
-    }
-}
+// fn draw_colliders(
+//     mut gizmos: Gizmos,
+//     circle_collider_query: Query<(&Transform, &CircleCollider), Without<AARectCollider>>,
+//     aa_rect_collider_query: Query<(&Transform, &AARectCollider), Without<CircleCollider>>,
+// ) {
+//     for (transform, collider) in circle_collider_query.iter() {
+//         gizmos.circle_2d(transform.translation.xy(), collider.radius, Color::RED);
+//     }
+//     for (transform, collider) in aa_rect_collider_query.iter() {
+//         gizmos.rect_2d(transform.translation.xy(), 0., collider.size, Color::RED);
+//     }
+// }
 
 #[derive(FromPrimitive, Clone, Copy, PartialEq, Eq)]
 pub enum CollisionLayerNames {
@@ -270,7 +281,7 @@ impl Default for CollisionLayers {
     }
 }
 
-#[derive(Event)]
+#[derive(Event, Clone, Copy)]
 pub struct CollideEvent {
     pub a: Entity,
     pub b: Entity,
@@ -282,12 +293,32 @@ impl CollideEvent {
     }
 }
 
+#[derive(Event)]
+pub struct UniqueCollideEvent {
+    pub a: Entity,
+    pub b: Entity,
+}
+
+impl UniqueCollideEvent {
+    fn new(collide_event: CollideEvent) -> Self {
+        Self {
+            a: collide_event.a,
+            b: collide_event.b,
+        }
+    }
+}
+
+#[derive(Resource, Default)]
+struct CollideEventsThisFrame(Vec<(Entity, Entity)>);
+
 fn find_collisions(
     circle_collider_query: Query<(&CircleCollider, &Transform)>,
     aa_rect_collider_query: Query<(&AARectCollider, &Transform)>,
     collision_layers: Res<CollisionLayers>,
     quad_tree: Res<QuadTree>,
     mut collide_event_writer: EventWriter<CollideEvent>,
+    mut unique_collide_event_writer: EventWriter<UniqueCollideEvent>,
+    mut collide_events_this_frame: ResMut<CollideEventsThisFrame>,
 ) {
     for layer in &collision_layers.layers {
         if layer.collides_with.len() == 0 {
@@ -304,7 +335,9 @@ fn find_collisions(
                     &aa_rect_collider_query,
                     &quad_tree,
                     &mut collide_event_writer,
+                    &mut unique_collide_event_writer,
                     &layer.collides_with,
+                    &mut collide_events_this_frame,
                 );
             }
         }
@@ -320,7 +353,9 @@ fn handle_circle_collisions(
     aa_rect_collider_query: &Query<(&AARectCollider, &Transform)>,
     quad_tree: &Res<QuadTree>,
     collide_event_writer: &mut EventWriter<CollideEvent>,
+    unique_collide_event_writer: &mut EventWriter<UniqueCollideEvent>,
     collides_with: &Vec<CollisionLayerNames>,
+    collide_events_this_frame: &mut ResMut<CollideEventsThisFrame>,
 ) {
     for b_entity in quad_tree.query_range(&AABB::new(
         a_translation,
@@ -329,13 +364,23 @@ fn handle_circle_collisions(
         if let Ok((b, b_transform)) = circle_collider_query.get(b_entity) {
             if collides_with.contains(&b.layer) {
                 if circle_circle_collision(a, a_translation, b, b_transform.translation.xy()) {
-                    collide_event_writer.send(CollideEvent::new(*a_entity, b_entity));
+                    let collide_event = CollideEvent::new(*a_entity, b_entity);
+                    collide_event_writer.send(collide_event);
+                    if !collide_events_this_frame.0.contains(&(*a_entity, b_entity)) {
+                        unique_collide_event_writer.send(UniqueCollideEvent::new(collide_event));
+                        collide_events_this_frame.0.push((*a_entity, b_entity));
+                    }
                 }
             }
         } else if let Ok((b, b_transform)) = aa_rect_collider_query.get(b_entity) {
             if collides_with.contains(&b.layer) {
                 if circle_aa_rect_collision(a, a_translation, b, b_transform.translation.xy()) {
-                    collide_event_writer.send(CollideEvent::new(*a_entity, b_entity));
+                    let collide_event = CollideEvent::new(*a_entity, b_entity);
+                    collide_event_writer.send(collide_event);
+                    if !collide_events_this_frame.0.contains(&(*a_entity, b_entity)) {
+                        unique_collide_event_writer.send(UniqueCollideEvent::new(collide_event));
+                        collide_events_this_frame.0.push((*a_entity, b_entity));
+                    }
                 }
             }
         }
@@ -376,6 +421,32 @@ fn handle_collisions(
                     velocity_a.0 -= normal * dot_product;
                 }
             }
+        }
+    }
+}
+
+#[derive(Event)]
+pub struct AddImpulseEvent {
+    value: Vec2,
+    entity: Entity,
+}
+
+impl AddImpulseEvent {
+    pub fn new(change_in_velocity: Vec2, mass: f32, apply_to_entity: Entity) -> Self {
+        Self {
+            value: change_in_velocity * mass,
+            entity: apply_to_entity,
+        }
+    }
+}
+
+fn apply_impulse(
+    mut add_impulse_event_reader: EventReader<AddImpulseEvent>,
+    mut physics_query: Query<(&Mass, &mut Velocity), With<Physics>>,
+) {
+    for event in add_impulse_event_reader.read() {
+        if let Ok((mass, mut velocity)) = physics_query.get_mut(event.entity) {
+            velocity.0 += event.value / mass.0
         }
     }
 }

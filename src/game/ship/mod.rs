@@ -5,11 +5,11 @@ use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 
 use super::{
     aliens::Alien,
-    health::HealthRunoutEvent,
     health::{ChangeHealthEvent, ChangeHealthMode, Health},
+    health::{HealthRunoutEvent, HealthSet},
     physics::{
-        Acceleration, CircleCollider, CollideEvent, CollisionLayerNames, CollisionLayers, Physics,
-        Velocity,
+        Acceleration, CircleCollider, CollisionLayerNames, CollisionLayers, Mass, Physics,
+        UniqueCollideEvent, Velocity,
     },
     GameOverEvent, PLAYER_AREA_HALF_DIMENTION,
 };
@@ -25,7 +25,14 @@ impl Plugin for ShipPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((PilotPlugin, GunnerPlugin))
             .add_systems(Startup, spawn_ship)
-            .add_systems(Update, (check_collisions, check_runout, check_bounds))
+            .add_systems(
+                Update,
+                (
+                    check_collisions.in_set(HealthSet::Write),
+                    check_health_runout.in_set(HealthSet::Read),
+                    check_bounds,
+                ),
+            )
             .add_systems(PostUpdate, (move_camera,));
     }
 }
@@ -89,6 +96,7 @@ fn spawn_ship(
                 ..default()
             },
             Velocity::default(),
+            Mass(10_000.0),
             Ship::default(),
             Health::new(100.),
             CircleCollider::new(15., CollisionLayerNames::Ship),
@@ -128,14 +136,14 @@ fn check_collisions(
     ship_query: Query<Entity, (With<Ship>, Without<Alien>)>,
     alien_query: Query<Entity, (With<Alien>, Without<Ship>)>,
     mut change_health_event_writer: EventWriter<ChangeHealthEvent>,
-    mut collide_event_reader: EventReader<CollideEvent>,
+    mut unique_collide_event_reader: EventReader<UniqueCollideEvent>,
 ) {
     if let Ok(ship) = ship_query.get_single() {
-        for event in collide_event_reader.read() {
+        for event in unique_collide_event_reader.read() {
             if event.a == ship {
                 if let Ok(alien) = alien_query.get(event.b) {
                     change_health_event_writer.send(ChangeHealthEvent::new(
-                        0.,
+                        0., //5.
                         ChangeHealthMode::Damage,
                         ship,
                     ));
@@ -146,7 +154,7 @@ fn check_collisions(
     }
 }
 
-fn check_runout(
+fn check_health_runout(
     mut commands: Commands,
     mut game_over_event_writer: EventWriter<GameOverEvent>,
     mut health_runout_event_reader: EventReader<HealthRunoutEvent>,

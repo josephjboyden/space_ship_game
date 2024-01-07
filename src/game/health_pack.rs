@@ -2,7 +2,7 @@ use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 
 use super::{
     health::{ChangeHealthEvent, ChangeHealthMode},
-    physics::{CircleCollider, CollideEvent, CollisionLayerNames, CollisionLayers},
+    physics::{CircleCollider, CollisionLayerNames, CollisionLayers, UniqueCollideEvent},
     quad_tree::QuadTreeElement,
     ship::Ship,
 };
@@ -66,9 +66,9 @@ fn pickup(
     health_pack_query: Query<Entity, With<HealthPack>>,
     ship_query: Query<Entity, With<Ship>>,
     mut change_health_event_writer: EventWriter<ChangeHealthEvent>,
-    mut collision_event_reader: EventReader<CollideEvent>,
+    mut unique_collision_event_reader: EventReader<UniqueCollideEvent>,
 ) {
-    for event in collision_event_reader.read() {
+    for event in unique_collision_event_reader.read() {
         if let Ok(ship) = ship_query.get(event.a) {
             if let Ok(health_pack) = health_pack_query.get(event.b) {
                 commands.entity(health_pack).despawn();

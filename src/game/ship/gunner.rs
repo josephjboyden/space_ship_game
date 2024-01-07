@@ -2,9 +2,10 @@ use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 
 use super::super::{
     aliens::Alien,
-    health::{ChangeHealthEvent, ChangeHealthMode},
+    health::{ChangeHealthEvent, ChangeHealthMode, HealthSet},
     physics::{
-        CircleCollider, CollideEvent, CollisionLayerNames, CollisionLayers, Physics, Velocity,
+        AddImpulseEvent, CircleCollider, CollisionLayerNames, CollisionLayers, Mass, Physics,
+        UniqueCollideEvent, Velocity,
     },
     player::{PlayerManager, Role},
 };
@@ -26,7 +27,11 @@ impl Plugin for GunnerPlugin {
             )
             .add_systems(
                 Update,
-                (gun_fired, despawn_projectiles, check_projectile_collisions),
+                (
+                    gun_fired,
+                    despawn_projectiles,
+                    check_projectile_collisions.in_set(HealthSet::Write),
+                ),
             );
     }
 }
@@ -131,7 +136,7 @@ impl FireEvent {
     }
 }
 
-const FIRE_RATE: f32 = 5.;
+const FIRE_RATE: f32 = 10.;
 const FIRE_INTERVAL: f32 = 1. / FIRE_RATE;
 
 fn handle_mouse_buttons(
@@ -207,7 +212,7 @@ struct Projectile {
     time_of_creation: f32,
 }
 
-const PROJECTILE_SPEED: f32 = 500.;
+const PROJECTILE_SPEED: f32 = 200.;
 
 fn gun_fired(
     mut commands: Commands,
@@ -217,18 +222,23 @@ fn gun_fired(
     time: Res<Time>,
     mut gun_query: Query<&mut Gun>,
     mut collision_layers: ResMut<CollisionLayers>,
+    ship_query: Query<Entity, With<Ship>>,
+    mut add_impulse_event_writer: EventWriter<AddImpulseEvent>,
 ) {
     for event in fire_event_reader.read() {
         if let Ok(mut gun) = gun_query.get_single_mut() {
             gun.last_fired = time.elapsed_seconds_wrapped()
         }
+        let velocity = event.direction * PROJECTILE_SPEED + event.velocity.0;
+        let mass: f32 = 1_000.0;
         let projectile_entity = commands
             .spawn((
                 Projectile {
                     time_of_creation: time.elapsed_seconds_wrapped(),
                 },
-                Velocity(event.direction * PROJECTILE_SPEED + event.velocity.0),
+                Velocity(velocity),
                 Physics::default(),
+                Mass(mass),
                 MaterialMesh2dBundle {
                     mesh: meshes.add(shape::Circle::new(10.).into()).into(),
                     material: materials.add(ColorMaterial::from(Color::ORANGE_RED)),
@@ -245,6 +255,9 @@ fn gun_fired(
         collision_layers.layers[CollisionLayerNames::CollidesWithAliens as usize]
             .in_layer
             .push(projectile_entity);
+        if let Ok(ship) = ship_query.get_single() {
+            add_impulse_event_writer.send(AddImpulseEvent::new(-velocity, mass, ship));
+        }
     }
 }
 
@@ -267,9 +280,9 @@ fn check_projectile_collisions(
     projectile_query: Query<Entity, (With<Projectile>, Without<Alien>)>,
     alien_query: Query<Entity, (With<Alien>, Without<Projectile>)>,
     mut change_health_event_writer: EventWriter<ChangeHealthEvent>,
-    mut collide_event_reader: EventReader<CollideEvent>,
+    mut unique_collide_event_reader: EventReader<UniqueCollideEvent>,
 ) {
-    for event in collide_event_reader.read() {
+    for event in unique_collide_event_reader.read() {
         if let Ok(projectile) = projectile_query.get(event.a) {
             if let Ok(alien) = alien_query.get(event.b) {
                 commands.entity(projectile).despawn();
