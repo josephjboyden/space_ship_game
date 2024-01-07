@@ -38,7 +38,7 @@ pub struct World {
 
 impl World {
     fn generate() -> Self {
-        let noise = OpenSimplex::new(7);
+        let noise = OpenSimplex::new(9);
         let mut world_data: [[bool; M]; N] = [[false; M]; N];
 
         for j in 0..M {

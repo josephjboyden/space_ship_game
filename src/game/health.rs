@@ -46,8 +46,8 @@ pub enum ChangeHealthMode {
 #[derive(Event)]
 pub struct ChangeHealthEvent {
     value: f32,
-    change_health_mode: ChangeHealthMode,
-    entity: Entity,
+    pub change_health_mode: ChangeHealthMode,
+    pub entity: Entity,
 }
 
 impl ChangeHealthEvent {

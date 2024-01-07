@@ -1,5 +1,6 @@
 mod gunner;
 mod pilot;
+pub mod shield;
 
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 
@@ -18,6 +19,7 @@ use crate::MainCamera;
 
 use gunner::GunnerPlugin;
 use pilot::PilotPlugin;
+use shield::{check_shield_runout, refill, take_damage, Shield};
 
 pub struct ShipPlugin;
 
@@ -30,6 +32,9 @@ impl Plugin for ShipPlugin {
                 (
                     check_collisions.in_set(HealthSet::Write),
                     check_health_runout.in_set(HealthSet::Read),
+                    check_shield_runout.in_set(HealthSet::Read),
+                    take_damage.in_set(HealthSet::Change),
+                    refill.in_set(HealthSet::Write),
                     check_bounds,
                 ),
             )
@@ -67,6 +72,7 @@ impl Gun {
 }
 
 const SHIP_SIZE: f32 = 60. / 128.;
+const SHIELD_RADIUS: f32 = 42.;
 
 fn spawn_ship(
     mut commands: Commands,
@@ -98,8 +104,8 @@ fn spawn_ship(
             Velocity::default(),
             Mass(10_000.0),
             Ship::default(),
-            Health::new(100.),
-            CircleCollider::new(15., CollisionLayerNames::Ship),
+            Health::new(25.),
+            CircleCollider::new(SHIELD_RADIUS, CollisionLayerNames::Ship),
         ))
         .with_children(|parent| {
             parent.spawn((
@@ -112,6 +118,19 @@ fn spawn_ship(
                     ..default()
                 },
                 Gun::new(75. * SHIP_SIZE),
+            ));
+
+            parent.spawn((
+                Shield::default(),
+                Health::new(100.),
+                MaterialMesh2dBundle {
+                    mesh: meshes
+                        .add(shape::Circle::new(SHIELD_RADIUS / SHIP_SIZE).into())
+                        .into(),
+                    material: materials.add(ColorMaterial::from(Color::rgba(0.5, 0.9, 1., 0.5))),
+                    transform: Transform::from_translation(Vec3::new(0., 0., 1.1)),
+                    ..default()
+                },
             ));
         })
         .id();
@@ -133,8 +152,9 @@ fn move_camera(
 
 fn check_collisions(
     mut commands: Commands,
-    ship_query: Query<Entity, (With<Ship>, Without<Alien>)>,
-    alien_query: Query<Entity, (With<Alien>, Without<Ship>)>,
+    ship_query: Query<Entity, (With<Ship>, (Without<Alien>, Without<Shield>))>,
+    shield_query: Query<(Entity, &Shield), Without<Alien>>,
+    alien_query: Query<Entity, With<Alien>>,
     mut change_health_event_writer: EventWriter<ChangeHealthEvent>,
     mut unique_collide_event_reader: EventReader<UniqueCollideEvent>,
 ) {
@@ -142,8 +162,19 @@ fn check_collisions(
         for event in unique_collide_event_reader.read() {
             if event.a == ship {
                 if let Ok(alien) = alien_query.get(event.b) {
+                    if let Ok((shield_entity, shield)) = shield_query.get_single() {
+                        if !shield.disabled {
+                            change_health_event_writer.send(ChangeHealthEvent::new(
+                                5.,
+                                ChangeHealthMode::Damage,
+                                shield_entity,
+                            ));
+                            commands.entity(alien).despawn();
+                            return;
+                        }
+                    }
                     change_health_event_writer.send(ChangeHealthEvent::new(
-                        0., //5.
+                        5.,
                         ChangeHealthMode::Damage,
                         ship,
                     ));

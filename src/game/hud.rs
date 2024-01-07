@@ -3,7 +3,7 @@ use bevy::{
     prelude::*,
 };
 
-use super::{health::Health, score::Score, ship::Ship, GameOverEvent};
+use super::{health::Health, score::Score, ship::shield::Shield, ship::Ship, GameOverEvent};
 
 pub struct HUDPlugin;
 
@@ -12,7 +12,13 @@ impl Plugin for HUDPlugin {
         app.add_systems(Startup, build_hud_root)
             .add_systems(
                 Update,
-                (update_fps, update_score, update_healthbar, game_over),
+                (
+                    update_fps,
+                    update_score,
+                    update_healthbar,
+                    update_sheildbar,
+                    game_over,
+                ),
             )
             .add_plugins(FrameTimeDiagnosticsPlugin);
     }
@@ -42,6 +48,9 @@ struct ScoreText;
 
 #[derive(Component)]
 struct Healthbar;
+
+#[derive(Component)]
+struct Shieldbar;
 
 #[derive(Component)]
 struct GameOverText;
@@ -111,7 +120,7 @@ fn build_hud<'a>(parent: &'a mut ChildBuilder, asset_server: Res<AssetServer>) {
                 height: Val::Percent(50.),
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
-                flex_direction: FlexDirection::Row,
+                flex_direction: FlexDirection::Column,
                 ..default()
             },
             ..default()
@@ -134,7 +143,7 @@ fn build_hud<'a>(parent: &'a mut ChildBuilder, asset_server: Res<AssetServer>) {
     parent.spawn(NodeBundle {
         style: Style {
             width: Val::Percent(100.),
-            height: Val::Percent(21.),
+            height: Val::Percent(19.),
             ..default()
         },
         ..default()
@@ -144,7 +153,10 @@ fn build_hud<'a>(parent: &'a mut ChildBuilder, asset_server: Res<AssetServer>) {
         .spawn(NodeBundle {
             style: Style {
                 width: Val::Percent(50.),
-                height: Val::Percent(2.),
+                height: Val::Percent(4.),
+                align_items: AlignItems::FlexStart,
+                justify_content: JustifyContent::FlexStart,
+                flex_direction: FlexDirection::Column,
                 ..default()
             },
             background_color: Color::GRAY.into(),
@@ -155,7 +167,20 @@ fn build_hud<'a>(parent: &'a mut ChildBuilder, asset_server: Res<AssetServer>) {
                 NodeBundle {
                     style: Style {
                         width: Val::Percent(100.),
-                        height: Val::Percent(100.),
+                        height: Val::Percent(50.),
+                        ..default()
+                    },
+                    background_color: Color::rgb(0.5, 0.9, 1.).into(),
+                    ..default()
+                },
+                Shieldbar,
+            ));
+
+            parent.spawn((
+                NodeBundle {
+                    style: Style {
+                        width: Val::Percent(100.),
+                        height: Val::Percent(50.),
                         ..default()
                     },
                     background_color: Color::RED.into(),
@@ -195,7 +220,24 @@ fn update_healthbar(
     for mut style in &mut healthbar_query {
         if let Ok(ship_health) = ship_query.get_single() {
             style.width = Val::Percent((ship_health.value / ship_health.max_value) * 100.);
+        } else {
+            style.width = Val::Percent(0.);
         }
+    }
+}
+
+fn update_sheildbar(
+    mut shieldbar_query: Query<&mut Style, With<Shieldbar>>,
+    shield_query: Query<(&Health, &Shield)>,
+) {
+    for mut style in &mut shieldbar_query {
+        if let Ok((health, shield)) = shield_query.get_single() {
+            if !shield.disabled {
+                style.width = Val::Percent((health.value / health.max_value) * 100.);
+                return;
+            }
+        }
+        style.width = Val::Percent(0.);
     }
 }
 

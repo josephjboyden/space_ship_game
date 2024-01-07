@@ -12,6 +12,8 @@ use collision::{
 };
 use movement::{acceleration_physics_update, apply_impulse, velocity_physics_update};
 
+//use components::{AARectCollider, CircleCollider};
+
 pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
