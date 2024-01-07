@@ -230,14 +230,14 @@ fn gun_fired(
         if let Ok(mut gun) = gun_query.get_single_mut() {
             gun.last_fired = time.elapsed_seconds_wrapped()
         }
-        let velocity = event.direction * PROJECTILE_SPEED + event.velocity.0;
+        let velocity = event.direction * PROJECTILE_SPEED;
         let mass: f32 = 1_000.0;
         let projectile_entity = commands
             .spawn((
                 Projectile {
                     time_of_creation: time.elapsed_seconds_wrapped(),
                 },
-                Velocity(velocity),
+                Velocity(velocity + event.velocity.0),
                 Physics::default(),
                 Mass(mass),
                 MaterialMesh2dBundle {
