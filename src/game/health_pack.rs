@@ -2,7 +2,10 @@ use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
 
 use super::{
     health::{ChangeHealthEvent, ChangeHealthMode},
-    physics::{CircleCollider, CollisionLayerNames, CollisionLayers, UniqueCollideEvent},
+    physics::{
+        collision::{CollisionLayerNames, CollisionLayers, UniqueCollideEvent},
+        components::CircleCollider,
+    },
     quad_tree::QuadTreeElement,
     ship::Ship,
 };

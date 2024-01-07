@@ -11,7 +11,10 @@ use alien_avoid::AARectAlienAvoid;
 use super::{
     health::{Health, HealthRunoutEvent, HealthSet},
     health_pack::SpawnHelthPackEvent,
-    physics::{CircleCollider, CollisionLayerNames, CollisionLayers, Physics, Velocity},
+    physics::{
+        collision::{CollisionLayerNames, CollisionLayers},
+        components::{CircleCollider, Physics, Velocity},
+    },
     quad_tree::*,
     score::Score,
     ship::Ship,

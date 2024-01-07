@@ -8,8 +8,8 @@ use super::{
     health::{ChangeHealthEvent, ChangeHealthMode, Health},
     health::{HealthRunoutEvent, HealthSet},
     physics::{
-        Acceleration, CircleCollider, CollisionLayerNames, CollisionLayers, Mass, Physics,
-        UniqueCollideEvent, Velocity,
+        collision::{CollisionLayerNames, CollisionLayers, UniqueCollideEvent},
+        components::{Acceleration, CircleCollider, Mass, Physics, Velocity},
     },
     GameOverEvent, PLAYER_AREA_HALF_DIMENTION,
 };

@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use super::{
     super::{
-        physics::Acceleration,
+        physics::components::Acceleration,
         player::{PlayerManager, Role},
     },
     Ship,

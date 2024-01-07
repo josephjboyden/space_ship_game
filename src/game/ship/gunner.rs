@@ -4,8 +4,9 @@ use super::super::{
     aliens::Alien,
     health::{ChangeHealthEvent, ChangeHealthMode, HealthSet},
     physics::{
-        AddImpulseEvent, CircleCollider, CollisionLayerNames, CollisionLayers, Mass, Physics,
-        UniqueCollideEvent, Velocity,
+        collision::{CollisionLayerNames, CollisionLayers, UniqueCollideEvent},
+        components::{CircleCollider, Mass, Physics, Velocity},
+        movement::AddImpulseEvent,
     },
     player::{PlayerManager, Role},
 };

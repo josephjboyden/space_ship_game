@@ -3,7 +3,10 @@ use noise::{NoiseFn, OpenSimplex};
 
 use super::{
     aliens::alien_avoid::AARectAlienAvoid,
-    physics::{AARectCollider, CollisionLayerNames, CollisionLayers},
+    physics::{
+        collision::{CollisionLayerNames, CollisionLayers},
+        components::AARectCollider,
+    },
     quad_tree::QuadTreeElement,
     PLAYER_AREA_HALF_DIMENTION,
 };
